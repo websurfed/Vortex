@@ -1,8 +1,11 @@
-﻿import Tokenizer_new
+﻿import Tokenizer
+import Preprocessor
 
-source = "==="
+source = """
+x = 5
+"""
 
-result = Tokenizer_new.Lex(source)
+processed = Preprocessor.preprocess(source)
+result = Tokenizer.lex(processed)
 for token in result:
     print(token)
-
