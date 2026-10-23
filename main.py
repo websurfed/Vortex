@@ -1,9 +1,7 @@
 ﻿import Tokenizer
 import Preprocessor
 
-source = """
-x = 5
-"""
+source = "def add(a: int32, b: int32) -> int32:\n    return a + b\n"
 
 processed = Preprocessor.preprocess(source)
 result = Tokenizer.lex(processed)

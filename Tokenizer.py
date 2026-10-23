@@ -4,13 +4,26 @@ from typing import Callable
 
 
 class Rule(Enum):
-    STATIC = auto()
-    DYNAMIC = auto()
+    STATIC = auto() # basic, maximal munch on a string
+    DYNAMIC = auto() # pass a lock and then figure out what else belongs to the token
+    VARIABLE = auto() # same as dynamic but it emits the token itself
+    COMPLEX = auto() # same as variable but it also handles line and col
 
 class Type(Enum):
     IDENTIFIER = auto()
     NUMERIC = auto()
+    LPAREN = auto()
+    RPAREN = auto()
+    COLON = auto()
+    COMMA = auto()
+    ARROW = auto()
+    DEF = auto()
     EQUALS = auto()
+    PLUS = auto()
+    SUB = auto()
+    STAR = auto()
+    SLASH = auto()
+    RETURN = auto()
     EOF = auto()
     NEWLINE = auto()
 
@@ -27,12 +40,17 @@ def lock_identifier(source: str, cursor: int) -> bool:
         return True
     return False
 
-def match_identifier(source: str, cursor: int) -> tuple[str, int]:
+
+def match_identifier(source: str, cursor: int, line: int, col: int) -> tuple[Token, int]:
     offset = 1
     while cursor + offset < len(source) and (source[cursor + offset].isalnum() or source[cursor + offset] == '_'):
         offset += 1
-    val = source[cursor:cursor+offset]
-    return val, offset
+    val = source[cursor:cursor + offset]
+
+    token_type = KEYWORDS.get(val, Type.IDENTIFIER)
+    token_val = None if token_type in KEYWORDS.values() else val
+
+    return Token(token_type, token_val, line, col), offset
 
 def lock_numeric(source: str, cursor: int) -> bool:
     char = source[cursor]
@@ -49,9 +67,23 @@ def match_numeric(source: str, cursor: int) -> tuple[str, int]:
 
 TOKEN_RULES = [
     (Rule.STATIC, Type.EQUALS, "="),
-    (Rule.DYNAMIC, Type.IDENTIFIER, lock_identifier, match_identifier),
+    (Rule.STATIC, Type.COLON, ":"),
+    (Rule.STATIC, Type.LPAREN, "("),
+    (Rule.STATIC, Type.RPAREN, ")"),
+    (Rule.STATIC, Type.ARROW, "->"),
+    (Rule.STATIC, Type.COMMA, ","),
+    (Rule.STATIC, Type.PLUS, "+"),
+    (Rule.STATIC, Type.SUB, "-"),
+    (Rule.STATIC, Type.STAR, "*"),
+    (Rule.STATIC, Type.SLASH, "/"),
+    (Rule.VARIABLE, lock_identifier, match_identifier),
     (Rule.DYNAMIC, Type.NUMERIC, lock_numeric, match_numeric)
 ]
+
+KEYWORDS = {
+    "def": Type.DEF,
+    "return": Type.RETURN
+}
 
 def _compile_dynamic_rules():
     cherry_rules = []
@@ -61,6 +93,16 @@ def _compile_dynamic_rules():
         rule_lock = rest[0]
         rule_match = rest[1]
         cherry_rules.append((rule, ruleType, rule_lock, rule_match))
+    return cherry_rules
+
+def _compile_variable_rules():
+    cherry_rules = []
+    for rule, *rest in TOKEN_RULES:
+        if rule != Rule.VARIABLE:
+            continue
+        rule_lock = rest[0]
+        rule_match = rest[1]
+        cherry_rules.append((rule, rule_lock, rule_match))
     return cherry_rules
 
 def _compile_static_rules():
@@ -131,6 +173,16 @@ def _try_dynamic_rules(source: str, cursor: int, compiled_dynamic_rules):
 
     return None
 
+def _try_variable_rules(source: str, cursor: int, line: int, col: int, compiled_variable_rules):
+    for rule, ruleLock, ruleMatch in compiled_variable_rules:
+        if rule != Rule.VARIABLE:
+            continue
+
+        if ruleLock(source, cursor):
+            return ruleMatch(source, cursor, line, col)
+
+    return None
+
 def _convert_rule_to_token(rule_data, line: int, col: int) -> Token:
     match rule_data:
         case(Rule.STATIC, token_type, literal):
@@ -139,12 +191,10 @@ def _convert_rule_to_token(rule_data, line: int, col: int) -> Token:
             raise ValueError(f"Unknown rule pattern: {rule_data}")
 
 def lex(source: str) -> list[Token]:
-    # normalize
-    source = source.replace("\r\n", "\n")
-
     # compile lists
     compiled_static_rules = _compile_static_rules()
     compiled_dynamic_rules = _compile_dynamic_rules()
+    compiled_variable_rules = _compile_variable_rules()
 
     cursor: int = 0
     length: int = len(source)
@@ -165,6 +215,8 @@ def lex(source: str) -> list[Token]:
 
         static_rule_attempt = _try_static_rules(source, cursor, compiled_static_rules)
         dynamic_rule_attempt = _try_dynamic_rules(source, cursor, compiled_dynamic_rules)
+        variable_rule_attempt = _try_variable_rules(source, cursor, line, col, compiled_variable_rules)
+
         if static_rule_attempt is not None:
             rule_data, offset = static_rule_attempt
 
@@ -183,9 +235,21 @@ def lex(source: str) -> list[Token]:
             cursor += offset
             col += offset
 
+        elif variable_rule_attempt is not None:
+            token, offset = variable_rule_attempt
+            tokens.append(token)
+
+            cursor += offset
+            col += offset
+
         else:
-            cursor += 1
-            col += 1
+            if source[cursor] == ' ':
+                cursor += 1
+                col += 1
+            else:
+                raise SyntaxError(
+                    f"Unexpected character {source[cursor]!r} at line {line}, col {col}"
+                )
 
     tokens.append(Token(Type.EOF, None, line, col))
     return tokens
