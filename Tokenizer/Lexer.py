@@ -1,89 +1,7 @@
-﻿from dataclasses import dataclass
-from enum import Enum, auto
-from typing import Callable
+﻿from .Types import Rule, Type, Token
+from .Rules import TOKEN_RULES
 
-
-class Rule(Enum):
-    STATIC = auto() # basic, maximal munch on a string
-    DYNAMIC = auto() # pass a lock and then figure out what else belongs to the token
-    VARIABLE = auto() # same as dynamic but it emits the token itself
-    COMPLEX = auto() # same as variable but it also handles line and col
-
-class Type(Enum):
-    IDENTIFIER = auto()
-    NUMERIC = auto()
-    LPAREN = auto()
-    RPAREN = auto()
-    COLON = auto()
-    COMMA = auto()
-    ARROW = auto()
-    DEF = auto()
-    EQUALS = auto()
-    PLUS = auto()
-    SUB = auto()
-    STAR = auto()
-    SLASH = auto()
-    RETURN = auto()
-    EOF = auto()
-    NEWLINE = auto()
-
-@dataclass
-class Token:
-    type: Type
-    value: str | None
-    line: int
-    col: int
-
-def lock_identifier(source: str, cursor: int) -> bool:
-    char = source[cursor]
-    if char.isalpha() or char == '_':
-        return True
-    return False
-
-
-def match_identifier(source: str, cursor: int, line: int, col: int) -> tuple[Token, int]:
-    offset = 1
-    while cursor + offset < len(source) and (source[cursor + offset].isalnum() or source[cursor + offset] == '_'):
-        offset += 1
-    val = source[cursor:cursor + offset]
-
-    token_type = KEYWORDS.get(val, Type.IDENTIFIER)
-    token_val = None if token_type in KEYWORDS.values() else val
-
-    return Token(token_type, token_val, line, col), offset
-
-def lock_numeric(source: str, cursor: int) -> bool:
-    char = source[cursor]
-    if char.isdigit():
-        return True
-    return False
-
-def match_numeric(source: str, cursor: int) -> tuple[str, int]:
-    offset = 1
-    while cursor + offset < len(source) and source[cursor + offset].isdigit():
-        offset += 1
-    val = source[cursor:cursor + offset]
-    return val, offset
-
-TOKEN_RULES = [
-    (Rule.STATIC, Type.EQUALS, "="),
-    (Rule.STATIC, Type.COLON, ":"),
-    (Rule.STATIC, Type.LPAREN, "("),
-    (Rule.STATIC, Type.RPAREN, ")"),
-    (Rule.STATIC, Type.ARROW, "->"),
-    (Rule.STATIC, Type.COMMA, ","),
-    (Rule.STATIC, Type.PLUS, "+"),
-    (Rule.STATIC, Type.SUB, "-"),
-    (Rule.STATIC, Type.STAR, "*"),
-    (Rule.STATIC, Type.SLASH, "/"),
-    (Rule.VARIABLE, lock_identifier, match_identifier),
-    (Rule.DYNAMIC, Type.NUMERIC, lock_numeric, match_numeric)
-]
-
-KEYWORDS = {
-    "def": Type.DEF,
-    "return": Type.RETURN
-}
+INDENTATION_NUM: int = 4
 
 def _compile_dynamic_rules():
     cherry_rules = []
@@ -116,9 +34,9 @@ def _compile_static_rules():
     compiled_rules = []
     cherry_length = len(cherry_rules)
     while len(compiled_rules) < cherry_length:
-        rule: Rule
-        rule_type: Type
-        rule_literal: str
+        rule = None
+        rule_type = None
+        rule_literal = ""
         longest_literal = -1
         largest_index: int = -1
 
@@ -191,7 +109,6 @@ def _convert_rule_to_token(rule_data, line: int, col: int) -> Token:
             raise ValueError(f"Unknown rule pattern: {rule_data}")
 
 def lex(source: str) -> list[Token]:
-    # compile lists
     compiled_static_rules = _compile_static_rules()
     compiled_dynamic_rules = _compile_dynamic_rules()
     compiled_variable_rules = _compile_variable_rules()
@@ -203,8 +120,22 @@ def lex(source: str) -> list[Token]:
     line = 1
     col = 1
 
-    while cursor < len(source):
-        if source[cursor] == '\n':
+    while cursor < length:
+        char: str = source[cursor]
+
+        # tracking
+        if col == 1:
+            if char == ' ':
+                spaces = 0
+                while cursor + spaces < length and source[cursor + spaces] == ' ':
+                    spaces += 1
+
+                print(spaces)
+            elif char == '\t':
+                raise SyntaxError("Tabs are not accepted for indentation, use spaces")
+
+        # specials
+        if char == '\n':
             tokens.append(Token(Type.NEWLINE, None, line, col))
 
             cursor += 1
@@ -212,7 +143,20 @@ def lex(source: str) -> list[Token]:
             col = 1
 
             continue
+        elif char == '#':
+            offset = 0
+            while cursor + offset < length and source[cursor + offset] != '\n':
+                offset += 1
 
+            comment = source[cursor:cursor+offset]
+            tokens.append(Token(Type.COMMENT, comment, line, col))
+
+            col += offset
+            cursor += offset
+
+            continue
+
+        # standards
         static_rule_attempt = _try_static_rules(source, cursor, compiled_static_rules)
         dynamic_rule_attempt = _try_dynamic_rules(source, cursor, compiled_dynamic_rules)
         variable_rule_attempt = _try_variable_rules(source, cursor, line, col, compiled_variable_rules)
@@ -243,12 +187,12 @@ def lex(source: str) -> list[Token]:
             col += offset
 
         else:
-            if source[cursor] == ' ':
+            if char == ' ':
                 cursor += 1
                 col += 1
             else:
                 raise SyntaxError(
-                    f"Unexpected character {source[cursor]!r} at line {line}, col {col}"
+                    f"Unexpected character {char!r} at line {line}, col {col}"
                 )
 
     tokens.append(Token(Type.EOF, None, line, col))
