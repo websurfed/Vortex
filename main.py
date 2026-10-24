@@ -1,7 +1,7 @@
 ﻿import Tokenizer
 import Preprocessor
 
-source = "def add(a, b):\n    return a + b"
+source = "\nx"
 
 processed = Preprocessor.preprocess(source)
 result = Tokenizer.lex(processed)

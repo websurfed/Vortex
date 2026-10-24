@@ -108,6 +108,27 @@ def _convert_rule_to_token(rule_data, line: int, col: int) -> Token:
         case _:
             raise ValueError(f"Unknown rule pattern: {rule_data}")
 
+def _is_line_blank(source: str, cursor: int) -> tuple[bool, int]:
+    length = len(source)
+    if length == 0:
+        return True, 0
+
+    char = source[cursor]
+    if char == '\n':
+        return True, 1
+
+    offset = 0
+    while cursor + offset < length and source[cursor + offset] != '\n':
+        offset += 1
+
+    final_cursor = cursor + offset
+    final_str = source[cursor:final_cursor]
+    if final_str.strip() == '':
+        print(f"NEWLINE CHECK: {final_str}")
+        return True, min(offset, length)
+
+    return False, 0
+
 def lex(source: str) -> list[Token]:
     compiled_static_rules = _compile_static_rules()
     compiled_dynamic_rules = _compile_dynamic_rules()
@@ -116,6 +137,7 @@ def lex(source: str) -> list[Token]:
     cursor: int = 0
     length: int = len(source)
 
+    indent_stack = [0]
     tokens = []
     line = 1
     col = 1
@@ -125,18 +147,46 @@ def lex(source: str) -> list[Token]:
 
         # tracking
         if col == 1:
-            if char == ' ':
-                spaces = 0
-                while cursor + spaces < length and source[cursor + spaces] == ' ':
-                    spaces += 1
+            blank_check, offset = _is_line_blank(source, cursor)
+            if blank_check:
+                tokens.append(Token(Type.LINE, None, line, col))
 
-                print(spaces)
-            elif char == '\t':
-                raise SyntaxError("Tabs are not accepted for indentation, use spaces")
+                col += offset
+                cursor += offset
+                continue
+
+            if char == '\t':
+                raise IndentationError("Tabs are not accepted for indentation, use spaces")
+
+            spaces = 0
+            while cursor + spaces < length and source[cursor + spaces] == ' ':
+                spaces += 1
+
+            if spaces % INDENTATION_NUM != 0:
+                raise IndentationError("Invalid indentation level")
+
+            normalized: int = int(spaces / INDENTATION_NUM)
+            level = indent_stack[-1]
+            diff = normalized - level
+
+            if normalized > level:
+                if diff > 1:
+                    raise IndentationError("Indented too much")
+                indent_stack.append(level + 1)
+                tokens.append(Token(Type.INDENT, '1', line, col))
+            elif normalized < level:
+                for _ in range(abs(diff)):
+                    del indent_stack[-1]
+                tokens.append(Token(Type.DEDENT, str(abs(diff)), line, col))
 
         # specials
         if char == '\n':
-            tokens.append(Token(Type.NEWLINE, None, line, col))
+            last_token = None
+            if len(tokens) > 0:
+                last_token = tokens[-1].type
+
+            if last_token != Type.LINE:
+                tokens.append(Token(Type.NEWLINE, None, line, col))
 
             cursor += 1
             line += 1
@@ -194,6 +244,14 @@ def lex(source: str) -> list[Token]:
                 raise SyntaxError(
                     f"Unexpected character {char!r} at line {line}, col {col}"
                 )
+
+    if len(tokens) > 0 and tokens[-1].type not in (Type.NEWLINE, Type.LINE):
+        tokens.append(Token(Type.NEWLINE, None, line, col))
+
+    if len(indent_stack) > 1:
+        levels = indent_stack[-1]
+        tokens.append(Token(Type.DEDENT, str(levels), line, col))
+        indent_stack = []
 
     tokens.append(Token(Type.EOF, None, line, col))
     return tokens
