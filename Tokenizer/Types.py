@@ -31,7 +31,7 @@ class Type(Enum):
     RETURN = auto()
     EOF = auto()
     NEWLINE = auto()
-    LINE = auto()
+    NON_LOGICAL_LINE = auto()
     COMMENT = auto()
     DEDENT = auto()
     INDENT = auto()

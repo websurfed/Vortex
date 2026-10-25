@@ -138,6 +138,7 @@ def lex(source: str) -> list[Token]:
     newline = True
 
     indent_stack = [0]
+    last_indent_stack = indent_stack.copy()
     tokens = []
     line = 1
     col = 1
@@ -151,7 +152,7 @@ def lex(source: str) -> list[Token]:
 
             blank_check, offset = _is_line_blank(source, cursor)
             if blank_check:
-                tokens.append(Token(Type.LINE, None, line, col))
+                tokens.append(Token(Type.NON_LOGICAL_LINE, None, line, col))
 
                 col += offset
                 cursor += offset
@@ -188,14 +189,36 @@ def lex(source: str) -> list[Token]:
             if len(tokens) > 0:
                 last_token = tokens[-1].type
 
-            if last_token != Type.LINE:
-                tokens.append(Token(Type.NEWLINE, None, line, col))
+            current_token = len(tokens) - 1
+            offset = current_token
+            while offset > 0 and tokens[offset].type not in (Type.NEWLINE, Type.NON_LOGICAL_LINE):
+                offset -= 1
+            offset = offset + 1 if tokens[offset].type in (Type.NEWLINE, Type.NON_LOGICAL_LINE) else offset
+            token_slice = tokens[offset:current_token + 1]
+
+            logical_tokens = False
+            for t in token_slice:
+                if t.type not in (Type.INDENT, Type.DEDENT, Type.COMMENT):
+                    logical_tokens = True
+                    break
+            if not logical_tokens:
+                indent_stack = last_indent_stack.copy()
+                for i, t in enumerate(token_slice):
+                    if t.type != Type.COMMENT:
+                        del token_slice[i]
+            tokens[offset:current_token + 1] = token_slice
+            print(f"LOGICAL TOKEN: {logical_tokens} | TOKENS: {token_slice}")
+
+            this_type = Type.NEWLINE if logical_tokens else Type.NON_LOGICAL_LINE
+            if last_token != Type.NON_LOGICAL_LINE:
+                tokens.append(Token(this_type, None, line, col))
 
             cursor += 1
             line += 1
             col = 1
 
             newline = True
+            last_indent_stack = indent_stack.copy()
             continue
         elif char == '#':
             offset = 0
@@ -249,7 +272,7 @@ def lex(source: str) -> list[Token]:
                     f"Unexpected character {char!r} at line {line}, col {col}"
                 )
 
-    if len(tokens) > 0 and tokens[-1].type not in (Type.NEWLINE, Type.LINE):
+    if len(tokens) > 0 and tokens[-1].type not in (Type.NEWLINE, Type.NON_LOGICAL_LINE):
         tokens.append(Token(Type.NEWLINE, None, line, col))
 
     if len(indent_stack) > 1:

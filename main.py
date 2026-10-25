@@ -1,7 +1,7 @@
 ﻿import Tokenizer
 import Preprocessor
 
-source = "\n\t\nx"
+source = "a:\n    x\n    # note\n    y"
 
 processed = Preprocessor.preprocess(source)
 result = Tokenizer.lex(processed)
