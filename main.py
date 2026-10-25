@@ -1,7 +1,7 @@
 ﻿import Tokenizer
 import Preprocessor
 
-source = "\nx"
+source = "\n\t\nx"
 
 processed = Preprocessor.preprocess(source)
 result = Tokenizer.lex(processed)

@@ -115,7 +115,7 @@ def _is_line_blank(source: str, cursor: int) -> tuple[bool, int]:
 
     char = source[cursor]
     if char == '\n':
-        return True, 1
+        return True, 0
 
     offset = 0
     while cursor + offset < length and source[cursor + offset] != '\n':
@@ -123,8 +123,7 @@ def _is_line_blank(source: str, cursor: int) -> tuple[bool, int]:
 
     final_cursor = cursor + offset
     final_str = source[cursor:final_cursor]
-    if final_str.strip() == '':
-        print(f"NEWLINE CHECK: {final_str}")
+    if final_str.strip(' ') == '':
         return True, min(offset, length)
 
     return False, 0
@@ -136,6 +135,7 @@ def lex(source: str) -> list[Token]:
 
     cursor: int = 0
     length: int = len(source)
+    newline = True
 
     indent_stack = [0]
     tokens = []
@@ -146,13 +146,16 @@ def lex(source: str) -> list[Token]:
         char: str = source[cursor]
 
         # tracking
-        if col == 1:
+        if newline:
+            newline = False
+
             blank_check, offset = _is_line_blank(source, cursor)
             if blank_check:
                 tokens.append(Token(Type.LINE, None, line, col))
 
                 col += offset
                 cursor += offset
+
                 continue
 
             if char == '\t':
@@ -192,6 +195,7 @@ def lex(source: str) -> list[Token]:
             line += 1
             col = 1
 
+            newline = True
             continue
         elif char == '#':
             offset = 0
