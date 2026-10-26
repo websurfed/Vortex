@@ -164,7 +164,6 @@ def lex(source: str) -> list[Token]:
 
             blank_check, offset = _is_line_blank(source, cursor)
             if blank_check:
-                # tokens.append(Token(Type.NON_LOGICAL_LINE, None, line, col))
                 promise_non_logical = True
 
                 col += offset
@@ -198,29 +197,27 @@ def lex(source: str) -> list[Token]:
 
         # specials
         if char == '\n':
-            last_token = None
             if len(tokens) > 0:
-                last_token = tokens[-1].type
+                current_token = max(len(tokens) - 1, 0)
+                offset = current_token
+                while offset > 0 and tokens[offset].type not in (Type.NEWLINE, Type.NON_LOGICAL_LINE):
+                    offset -= 1
+                offset = offset + 1 if tokens[offset].type in (Type.NEWLINE, Type.NON_LOGICAL_LINE) else offset
+                token_slice = tokens[offset:current_token + 1]
 
-            current_token = max(len(tokens) - 1, 0)
-            offset = current_token
-            while offset > 0 and tokens[offset].type not in (Type.NEWLINE, Type.NON_LOGICAL_LINE):
-                offset -= 1
-            offset = offset + 1 if tokens[offset].type in (Type.NEWLINE, Type.NON_LOGICAL_LINE) else offset
-            token_slice = tokens[offset:current_token + 1]
-
-            logical_tokens = False
-            for t in token_slice:
-                if t.type not in (Type.INDENT, Type.DEDENT, Type.COMMENT):
-                    logical_tokens = True
-                    break
-            if not logical_tokens:
-                indent_stack = last_indent_stack.copy()
-                token_slice = [t for t in token_slice if t.type == Type.COMMENT]
-            tokens[offset:current_token + 1] = token_slice
-            print(f"LOGICAL TOKEN: {logical_tokens} | TOKENS: {token_slice}")
+                logical_tokens = False
+                for t in token_slice:
+                    if t.type not in (Type.INDENT, Type.DEDENT, Type.COMMENT):
+                        logical_tokens = True
+                        break
+                if not logical_tokens:
+                    indent_stack = last_indent_stack.copy()
+                    token_slice = [t for t in token_slice if t.type == Type.COMMENT]
+                tokens[offset:current_token + 1] = token_slice
 
             this_type = Type.NEWLINE
+            if promise_non_logical:
+                this_type = Type.NON_LOGICAL_LINE
             tokens.append(Token(this_type, None, line, col))
 
             cursor += 1
@@ -228,6 +225,7 @@ def lex(source: str) -> list[Token]:
             col = 1
 
             newline = True
+            promise_non_logical = False
             last_indent_stack = indent_stack.copy()
             continue
         elif char == '#':

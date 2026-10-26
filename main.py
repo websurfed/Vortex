@@ -2,10 +2,10 @@
 import Preprocessor
 
 source = """
-a:
-    x
-  # badly indented comment
-    y
+def a:
+    b
+       # STOP
+    c
 """
 
 processed = Preprocessor.preprocess(source)
