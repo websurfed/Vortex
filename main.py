@@ -1,7 +1,12 @@
 ﻿import Tokenizer
 import Preprocessor
 
-source = "a:\n    x\n    # note\n    y"
+source = """
+a:
+    x
+  # badly indented comment
+    y
+"""
 
 processed = Preprocessor.preprocess(source)
 result = Tokenizer.lex(processed)

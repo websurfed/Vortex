@@ -1,4 +1,6 @@
-﻿from .Types import Rule, Type, Token
+﻿from argparse import ArgumentError
+
+from .Types import Rule, Type, Token
 from .Rules import TOKEN_RULES
 
 INDENTATION_NUM: int = 4
@@ -123,12 +125,21 @@ def _is_line_blank(source: str, cursor: int) -> tuple[bool, int]:
 
     final_cursor = cursor + offset
     final_str = source[cursor:final_cursor]
-    if final_str.strip(' ') == '':
+    stripped = final_str.strip(' ')
+    if stripped == '' or stripped.startswith('#'):
+        if stripped.startswith('#'):
+            offset = source[cursor:len(source)].find('#')
         return True, min(offset, length)
 
     return False, 0
 
 def lex(source: str) -> list[Token]:
+    if source.strip() == '':
+        return [Token(Type.EOF, None, 1, 1)]
+
+    if source and not source.endswith('\n'):
+        source += '\n'
+
     compiled_static_rules = _compile_static_rules()
     compiled_dynamic_rules = _compile_dynamic_rules()
     compiled_variable_rules = _compile_variable_rules()
@@ -138,6 +149,7 @@ def lex(source: str) -> list[Token]:
     newline = True
 
     indent_stack = [0]
+    promise_non_logical = False
     last_indent_stack = indent_stack.copy()
     tokens = []
     line = 1
@@ -152,7 +164,8 @@ def lex(source: str) -> list[Token]:
 
             blank_check, offset = _is_line_blank(source, cursor)
             if blank_check:
-                tokens.append(Token(Type.NON_LOGICAL_LINE, None, line, col))
+                # tokens.append(Token(Type.NON_LOGICAL_LINE, None, line, col))
+                promise_non_logical = True
 
                 col += offset
                 cursor += offset
@@ -169,7 +182,7 @@ def lex(source: str) -> list[Token]:
             if spaces % INDENTATION_NUM != 0:
                 raise IndentationError("Invalid indentation level")
 
-            normalized: int = int(spaces / INDENTATION_NUM)
+            normalized: int = spaces // INDENTATION_NUM
             level = indent_stack[-1]
             diff = normalized - level
 
@@ -189,7 +202,7 @@ def lex(source: str) -> list[Token]:
             if len(tokens) > 0:
                 last_token = tokens[-1].type
 
-            current_token = len(tokens) - 1
+            current_token = max(len(tokens) - 1, 0)
             offset = current_token
             while offset > 0 and tokens[offset].type not in (Type.NEWLINE, Type.NON_LOGICAL_LINE):
                 offset -= 1
@@ -203,15 +216,12 @@ def lex(source: str) -> list[Token]:
                     break
             if not logical_tokens:
                 indent_stack = last_indent_stack.copy()
-                for i, t in enumerate(token_slice):
-                    if t.type != Type.COMMENT:
-                        del token_slice[i]
+                token_slice = [t for t in token_slice if t.type == Type.COMMENT]
             tokens[offset:current_token + 1] = token_slice
             print(f"LOGICAL TOKEN: {logical_tokens} | TOKENS: {token_slice}")
 
-            this_type = Type.NEWLINE if logical_tokens else Type.NON_LOGICAL_LINE
-            if last_token != Type.NON_LOGICAL_LINE:
-                tokens.append(Token(this_type, None, line, col))
+            this_type = Type.NEWLINE
+            tokens.append(Token(this_type, None, line, col))
 
             cursor += 1
             line += 1
@@ -272,8 +282,8 @@ def lex(source: str) -> list[Token]:
                     f"Unexpected character {char!r} at line {line}, col {col}"
                 )
 
-    if len(tokens) > 0 and tokens[-1].type not in (Type.NEWLINE, Type.NON_LOGICAL_LINE):
-        tokens.append(Token(Type.NEWLINE, None, line, col))
+    # if len(tokens) > 0 and tokens[-1].type not in (Type.NEWLINE, Type.NON_LOGICAL_LINE):
+    #     tokens.append(Token(Type.NEWLINE, None, line, col))
 
     if len(indent_stack) > 1:
         levels = indent_stack[-1]
