@@ -1,6 +1,4 @@
-﻿from argparse import ArgumentError
-
-from .Types import Rule, Type, Token
+﻿from .Types import Rule, Type, Token
 from .Rules import TOKEN_RULES
 
 INDENTATION_NUM: int = 4
@@ -105,7 +103,7 @@ def _try_variable_rules(source: str, cursor: int, line: int, col: int, compiled_
 
 def _convert_rule_to_token(rule_data, line: int, col: int) -> Token:
     match rule_data:
-        case(Rule.STATIC, token_type, literal):
+        case(Rule.STATIC, token_type, _):
             return Token(token_type, None, line, col)
         case _:
             raise ValueError(f"Unknown rule pattern: {rule_data}")
@@ -286,7 +284,6 @@ def lex(source: str) -> list[Token]:
     if len(indent_stack) > 1:
         levels = indent_stack[-1]
         tokens.append(Token(Type.DEDENT, str(levels), line, col))
-        indent_stack = []
 
     tokens.append(Token(Type.EOF, None, line, col))
     return tokens
